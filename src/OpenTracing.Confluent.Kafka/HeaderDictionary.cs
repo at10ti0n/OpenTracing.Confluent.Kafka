@@ -21,10 +21,11 @@ namespace OpenTracing.Confluent.Kafka
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
         {
             return _headers
-                .Select(header =>
+                .Select(header => 
                     new KeyValuePair<string, string>(
-                        header.Key,
-                        Encoding.GetString(header.Value)))
+                                header.Key,
+                                _headers.TryGetLastBytes(header.Key, out var resultBytes) ? Encoding.GetString(resultBytes) : "")
+                )
                 .GetEnumerator();
         }
 
@@ -48,7 +49,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public bool Contains(KeyValuePair<string, string> item)
         {
-            if (_headers.TryGetLast(item.Key, out var lastHeader))
+            if (_headers.TryGetLastBytes(item.Key, out var lastHeader))
             {
                 return item.Value == Encoding.GetString(lastHeader);
             }
@@ -72,7 +73,7 @@ namespace OpenTracing.Confluent.Kafka
             {
                 var header = _headers[i];
                 array[i - arrayIndex] =
-                    new KeyValuePair<string, string>(header.Key, Encoding.GetString(header.Value));
+                    new KeyValuePair<string, string>(header.Key, Encoding.GetString(header.GetValueBytes()));
             }
         }
 
@@ -83,7 +84,7 @@ namespace OpenTracing.Confluent.Kafka
                 .ToList();
 
             var headersWithSameKeyAndValue = headersWithSameKey
-                .Where(header => Encoding.GetString(header.Value) == item.Value)
+                .Where(header => Encoding.GetString(header.GetValueBytes()) == item.Value)
                 .ToList();
 
             if (headersWithSameKeyAndValue.Any() == false)
@@ -100,7 +101,7 @@ namespace OpenTracing.Confluent.Kafka
 
             foreach (var header in headersWithSameKey)
             {
-                _headers.Add(header);
+                _headers.Add((Header)header);
             }
 
             return true;
@@ -122,7 +123,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public bool Remove(string key)
         {
-            if (_headers.TryGetLast(key, out _))
+            if (_headers.TryGetLastBytes(key, out _))
             {
                 _headers.Remove(key);
                 return true;
@@ -133,7 +134,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public bool TryGetValue(string key, out string value)
         {
-            if (_headers.TryGetLast(key, out var lastHeader))
+            if (_headers.TryGetLastBytes(key, out var lastHeader))
             {
                 value = Encoding.GetString(lastHeader);
                 return true;
@@ -145,7 +146,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public string this[string key]
         {
-            get => Encoding.GetString(_headers.GetLast(key));
+            get => Encoding.GetString(_headers.GetLastBytes(key));
             set
             {
                 _headers.Remove(key);
@@ -161,7 +162,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public ICollection<string> Values =>
             _headers
-                .Select(header => new KeyValuePair<string, string>(header.Key, Encoding.GetString(header.Value)))
+                .Select(header => new KeyValuePair<string, string>(header.Key, Encoding.GetString(header.GetValueBytes())))
                 .GroupBy(pair => pair.Key)
                 .Select(pairs => pairs.Last().Value)
                 .ToList();

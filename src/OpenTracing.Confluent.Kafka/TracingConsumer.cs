@@ -29,23 +29,6 @@ namespace OpenTracing.Confluent.Kafka
 
         public Handle Handle => _consumer.Handle;
         public string Name => _consumer.Name;
-        public event EventHandler<LogMessage> OnLog
-        {
-            add => _consumer.OnLog += value;
-            remove => _consumer.OnLog += value;
-        }
-
-        public event EventHandler<ErrorEvent> OnError
-        {
-            add => _consumer.OnError += value;
-            remove => _consumer.OnError += value;
-        }
-
-        public event EventHandler<string> OnStatistics
-        {
-            add => _consumer.OnStatistics += value;
-            remove => _consumer.OnStatistics += value;
-        }
 
         public ConsumeResult<TKey, TValue> Consume(TimeSpan timeout)
         {
@@ -61,9 +44,9 @@ namespace OpenTracing.Confluent.Kafka
                 return null;
             }
 
-            result.Headers = result.Headers ?? new Headers();
+            result.Message.Headers = result.Message.Headers ?? new Headers();
 
-            var scope = _tracer.CreateAndInjectActiveConsumerScopeFrom(result.Headers.ToDictionary(Encoding.UTF8));
+            var scope = _tracer.CreateAndInjectActiveConsumerScopeFrom(result.Message.Headers.ToDictionary(Encoding.UTF8));
 
             scope.Span.SetTag("kafka.topic", result.Topic);
             scope.Span.SetTag("kafka.partition", result.Partition);
@@ -85,9 +68,9 @@ namespace OpenTracing.Confluent.Kafka
                 return null;
             }
 
-            result.Headers = result.Headers ?? new Headers();
+            result.Message.Headers = result.Message.Headers ?? new Headers();
 
-            var scope = _tracer.CreateAndInjectActiveConsumerScopeFrom(result.Headers.ToDictionary(Encoding.UTF8));
+            var scope = _tracer.CreateAndInjectActiveConsumerScopeFrom(result.Message.Headers.ToDictionary(Encoding.UTF8));
 
             scope.Span.SetTag("kafka.topic", result.Topic);
             scope.Span.SetTag("kafka.partition", result.Partition);
@@ -140,24 +123,19 @@ namespace OpenTracing.Confluent.Kafka
             _consumer.StoreOffset(result);
         }
 
-        public void StoreOffsets(IEnumerable<TopicPartitionOffset> offsets)
+        public List<TopicPartitionOffset> Commit()
         {
-            _consumer.StoreOffsets(offsets);
+            return _consumer.Commit();
         }
 
-        public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken = new CancellationToken())
+        public void Commit(ConsumeResult<TKey, TValue> result)
         {
-            return _consumer.Commit(cancellationToken);
+            _consumer.Commit(result);
         }
 
-        public TopicPartitionOffset Commit(ConsumeResult<TKey, TValue> result, CancellationToken cancellationToken = new CancellationToken())
+        public void Commit(IEnumerable<TopicPartitionOffset> offsets)
         {
-            return _consumer.Commit(result, cancellationToken);
-        }
-
-        public void Commit(IEnumerable<TopicPartitionOffset> offsets, CancellationToken cancellationToken = new CancellationToken())
-        {
-            _consumer.Commit(offsets, cancellationToken);
+            _consumer.Commit(offsets);
         }
 
         public void Seek(TopicPartitionOffset tpo)
@@ -175,42 +153,54 @@ namespace OpenTracing.Confluent.Kafka
             _consumer.Resume(partitions);
         }
 
-        public List<TopicPartitionOffset> Committed(IEnumerable<TopicPartition> partitions, TimeSpan timeout, CancellationToken cancellationToken = new CancellationToken())
+        public List<TopicPartitionOffset> Committed(IEnumerable<TopicPartition> partitions, TimeSpan timeout)
         {
-            return _consumer.Committed(partitions, timeout, cancellationToken);
+            return _consumer.Committed(partitions, timeout);
         }
 
-        public List<TopicPartitionOffset> Position(IEnumerable<TopicPartition> partitions)
+        public Offset Position(TopicPartition partition)
         {
-            return _consumer.Position(partitions);
+            return _consumer.Position(partition);
         }
 
-        public List<TopicPartitionOffset> OffsetsForTimes(IEnumerable<TopicPartitionTimestamp> timestampsToSearch, TimeSpan timeout,
-            CancellationToken cancellationToken = new CancellationToken())
+        public List<TopicPartitionOffset> OffsetsForTimes(IEnumerable<TopicPartitionTimestamp> timestampsToSearch, TimeSpan timeout)
         {
-            return _consumer.OffsetsForTimes(timestampsToSearch, timeout, cancellationToken);
+            return _consumer.OffsetsForTimes(timestampsToSearch, timeout);
         }
 
+        public ConsumeResult<TKey, TValue> Consume(int millisecondsTimeout)
+        {
+            return _consumer.Consume(millisecondsTimeout);
+        }
+
+        public void StoreOffset(TopicPartitionOffset offset)
+        {
+            _consumer.StoreOffset(offset);
+        }
+
+        public List<TopicPartitionOffset> Committed(TimeSpan timeout)
+        {
+            return _consumer.Committed(timeout);
+        }
+
+        public WatermarkOffsets GetWatermarkOffsets(TopicPartition topicPartition)
+        {
+            return _consumer.GetWatermarkOffsets(topicPartition);
+        }
+
+        public WatermarkOffsets QueryWatermarkOffsets(TopicPartition topicPartition, TimeSpan timeout)
+        {
+            return _consumer.QueryWatermarkOffsets(topicPartition, timeout);
+        }
+
+        public void Close()
+        {
+            _consumer.Close();
+        }
         public string MemberId => _consumer.MemberId;
         public List<TopicPartition> Assignment => _consumer.Assignment;
         public List<string> Subscription => _consumer.Subscription;
 
-        public event EventHandler<List<TopicPartition>> OnPartitionsAssigned
-        {
-            add => _consumer.OnPartitionsAssigned += value;
-            remove => _consumer.OnPartitionsAssigned += value;
-        }
-
-        public event EventHandler<List<TopicPartition>> OnPartitionsRevoked
-        {
-            add => _consumer.OnPartitionsRevoked += value;
-            remove => _consumer.OnPartitionsRevoked += value;
-        }
-
-        public event EventHandler<CommittedOffsets> OnOffsetsCommitted
-        {
-            add => _consumer.OnOffsetsCommitted += value;
-            remove => _consumer.OnOffsetsCommitted += value;
-        }
+        public IConsumerGroupMetadata ConsumerGroupMetadata => _consumer.ConsumerGroupMetadata;
     }
 }

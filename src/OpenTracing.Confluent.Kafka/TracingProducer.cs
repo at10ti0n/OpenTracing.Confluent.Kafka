@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,25 +33,7 @@ namespace OpenTracing.Confluent.Kafka
 
         public string Name => _producer.Name;
 
-        public event EventHandler<LogMessage> OnLog
-        {
-            add => _producer.OnLog += value;
-            remove => _producer.OnLog += value;
-        }
-
-        public event EventHandler<ErrorEvent> OnError
-        {
-            add => _producer.OnError += value;
-            remove => _producer.OnError += value;
-        }
-
-        public event EventHandler<string> OnStatistics
-        {
-            add => _producer.OnStatistics += value;
-            remove => _producer.OnStatistics += value;
-        }
-
-        public async Task<DeliveryReport<TKey, TValue>> ProduceAsync(string topic, Message<TKey, TValue> message,
+        public async Task<DeliveryResult<TKey, TValue>> ProduceAsync(string topic, Message<TKey, TValue> message,
             CancellationToken cancellationToken = new CancellationToken())
         {
             message.Headers = message.Headers ?? new Headers();
@@ -70,11 +53,11 @@ namespace OpenTracing.Confluent.Kafka
             }
         }
 
-        public async Task<DeliveryReport<TKey, TValue>> ProduceAsync(TopicPartition topicPartition, Message<TKey, TValue> message,
+        public async Task<DeliveryResult<TKey, TValue>> ProduceAsync(TopicPartition topicPartition, Message<TKey, TValue> message,
             CancellationToken cancellationToken = new CancellationToken())
         {
             message.Headers = message.Headers ?? new Headers();
-            
+
             using (var scope = _tracer.CreateAndInjectActiveProducerScopeFrom(message.Headers.ToDictionary(Encoding.UTF8)))
             {
                 scope.Span.SetTag(Tags.MessageBusDestination, topicPartition.Topic);
@@ -86,48 +69,6 @@ namespace OpenTracing.Confluent.Kafka
                 scope.Span.SetTag("kafka.offset", report.Offset);
 
                 return report;
-            }
-        }
-
-        public void BeginProduce(string topic, Message<TKey, TValue> message, Action<DeliveryReportResult<TKey, TValue>> deliveryHandler)
-        {
-            message.Headers = message.Headers ?? new Headers();
-
-            var scope = _tracer.CreateAndInjectActiveProducerScopeFrom(message.Headers.ToDictionary(Encoding.UTF8));
-            scope.Span.SetTag(Tags.MessageBusDestination, topic);
-
-            _producer.BeginProduce(topic, message, TracingDeliveryHandler);
-
-            void TracingDeliveryHandler(DeliveryReportResult<TKey, TValue> report)
-            {
-                scope.Span.SetTag("kafka.topic", report.Topic);
-                scope.Span.SetTag("kafka.partition", report.Partition);
-                scope.Span.SetTag("kafka.offset", report.Offset);
-
-                deliveryHandler(report);
-
-                scope.Dispose();
-            }
-        }
-
-        public void BeginProduce(TopicPartition topicPartition, Message<TKey, TValue> message, Action<DeliveryReportResult<TKey, TValue>> deliveryHandler)
-        {
-            message.Headers = message.Headers ?? new Headers();
-
-            var scope = _tracer.CreateAndInjectActiveProducerScopeFrom(message.Headers.ToDictionary(Encoding.UTF8));
-            scope.Span.SetTag(Tags.MessageBusDestination, topicPartition.Topic);
-
-            _producer.BeginProduce(topicPartition, message, TracingDeliveryHandler);
-
-            void TracingDeliveryHandler(DeliveryReportResult<TKey, TValue> report)
-            {
-                scope.Span.SetTag("kafka.topic", report.Topic);
-                scope.Span.SetTag("kafka.partition", report.Partition);
-                scope.Span.SetTag("kafka.offset", report.Offset);
-
-                deliveryHandler(report);
-
-                scope.Dispose();
             }
         }
 
@@ -144,6 +85,41 @@ namespace OpenTracing.Confluent.Kafka
         public void Flush(CancellationToken cancellationToken = new CancellationToken())
         {
             _producer.Flush(cancellationToken);
+        }
+
+        public void Produce(string topic, Message<TKey, TValue> message, Action<DeliveryReport<TKey, TValue>> deliveryHandler = null)
+        {
+            _producer.Produce(topic, message, deliveryHandler);
+        }
+
+        public void Produce(TopicPartition topicPartition, Message<TKey, TValue> message, Action<DeliveryReport<TKey, TValue>> deliveryHandler = null)
+        {
+            _producer.Produce(topicPartition, message, deliveryHandler);
+        }
+
+        public void InitTransactions(TimeSpan timeout)
+        {
+            _producer.InitTransactions(timeout);
+        }
+
+        public void BeginTransaction()
+        {
+            _producer.BeginTransaction();
+        }
+
+        public void CommitTransaction(TimeSpan timeout)
+        {
+            _producer.CommitTransaction(timeout);
+        }
+
+        public void AbortTransaction(TimeSpan timeout)
+        {
+            _producer.AbortTransaction(timeout);
+        }
+
+        public void SendOffsetsToTransaction(IEnumerable<TopicPartitionOffset> offsets, IConsumerGroupMetadata groupMetadata, TimeSpan timeout)
+        {
+            _producer.SendOffsetsToTransaction(offsets, groupMetadata, timeout);
         }
     }
 }

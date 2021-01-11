@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Jaeger;
@@ -18,23 +20,24 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
                 var tracer = GetTracer();
 
                 var tracingProducer = GetTracingProducer(tracer);
-                var produceResult = await tracingProducer.ProduceAsync("topic1", new Message<string, string>
-                {
-                    Key = "TestMessage",
-                    Value = "I am your tracer"
-                });
+                var message = new Message<string, string> { Headers = new Headers() };
+                message.Key = "TestMessage";
+                message.Value = "{}";
+                message.Headers.Add("processInstanceId", Encoding.UTF8.GetBytes("111123321"));
+                message.Headers.Add("clientType", Encoding.UTF8.GetBytes("PF"));
+                message.Headers.Add("authorizationTicket", Encoding.UTF8.GetBytes("OUACK"));
+                message.Headers.Add("correlationId", Encoding.UTF8.GetBytes("QUACK"));
+                var produceResult = await tracingProducer.ProduceAsync("ro.btrl.in.copo.adapter.clientenrolment.createCustomer.v1", message);
 
                 Console.WriteLine(
                     $"Sent message to partition {produceResult.Partition.Value}, offset {produceResult.Offset.Value} on topic {produceResult.Topic}");
 
                 var tracingConsumer = GetTracingConsumer(tracer);
-                tracingConsumer.Subscribe("topic1");
+                tracingConsumer.Subscribe("ro.btrl.out.copo.adapter.clientenrolment.createCustomer.v1");
 
                 const int maxConsumeAttempts = 10;
                 var attemptsTried = 0;
-                tracingConsumer.OnError += (sender, @event) =>
-                    attemptsTried = @event.IsFatal ? maxConsumeAttempts : attemptsTried;
-
+               
                 while (attemptsTried < maxConsumeAttempts)
                 {
                     using (var scope = tracingConsumer.Consume(TimeSpan.FromSeconds(5), out var consumeResult))
@@ -43,15 +46,9 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
                         if (consumeResult == null)
                             continue;
 
-                        if (consumeResult.Offset < produceResult.Offset)
-                        {
-                            attemptsTried--;
-                            continue;
-                        }
-
                         scope.Span.SetTag("Consumer.Timeout", 5);
-                        scope.Span.SetTag("Consumer.Message.Key", consumeResult.Key);
-                        scope.Span.SetTag("Consumer.Message.Value", consumeResult.Value);
+                        scope.Span.SetTag("Consumer.Message.Key", consumeResult.Message.Key);
+                        scope.Span.SetTag("Consumer.Message.Value", consumeResult.Message.Value);
 
                         // Simulate consumption load for nicer traces
                         await Task.Delay(TimeSpan.FromSeconds(1));
@@ -87,7 +84,7 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
             return new Configuration("kafka.jaeger.example", logFactory)
                 .WithReporter(new Configuration.ReporterConfiguration(logFactory)
                     .WithSender(new Configuration.SenderConfiguration(logFactory)
-                        .WithEndpoint("http://localhost:14268/api/traces")))
+                        .WithEndpoint("http://jaeger:14268/api/traces")))
                 .WithSampler(new Configuration.SamplerConfiguration(logFactory)
                     .WithType(ConstSampler.Type)
                     .WithParam(1))
@@ -98,8 +95,7 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
         {
             return new ClientConfig
             {
-                GroupId = "kafka.jaeger",
-                BootstrapServers = "127.0.0.1:9092"
+                 BootstrapServers = "127.0.0.1:9092"
             };
         }
 
@@ -107,15 +103,13 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
         {
             var consumerConfig = new ConsumerConfig(GetClientConfig())
             {
-                AutoOffsetReset = AutoOffsetResetType.Earliest
+                AutoOffsetReset = AutoOffsetReset.Latest,
+                GroupId = "kafka.jaeger"
             };
 
-            var consumer = new Consumer<string, string>(consumerConfig);
+            var consumer = new ConsumerBuilder<string, string>(consumerConfig).Build();
             var tracingConsumer = new TracingConsumer<string, string>(tracer, consumer);
-            consumer.OnLog += (sender, message) =>
-                Console.WriteLine($"CONSUMER: {message.Level} {message.Message}");
-            consumer.OnError += (sender, @event) => Console.WriteLine($"CONSUMER: {@event.Code} {@event.Reason}");
-
+           
             return tracingConsumer;
         }
 
@@ -125,11 +119,9 @@ namespace Confluent.Kafka.Clients.Traced.By.Jaeger
             {
                 MessageTimeoutMs = 5000
             };
-            var producer = new Producer<string, string>(producerConfig);
+            var producer = new ProducerBuilder<string, string>(producerConfig).Build();
             var tracingProducer = new TracingProducer<string, string>(tracer, producer);
-            producer.OnLog += (sender, message) =>
-                Console.WriteLine($"PRODUCER: {message.Level} {message.Message}");
-            producer.OnError += (sender, @event) => Console.WriteLine($"PRODUCER: {@event.Code} {@event.Reason}");
+            
 
             return tracingProducer;
         }

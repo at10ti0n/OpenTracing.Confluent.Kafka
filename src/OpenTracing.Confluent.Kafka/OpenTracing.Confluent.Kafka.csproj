@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard1.3</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>OpenTracing.Confluent.Kafka</AssemblyName>
     <RootNamespace>OpenTracing.Confluent.Kafka</RootNamespace>
     <Authors>Fredrik Arvidsson</Authors>
@@ -21,7 +21,7 @@
     <LangVersion>7.3</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Confluent.Kafka" Version="1.0.0-beta2" />
+    <PackageReference Include="Confluent.Kafka" Version="1.5.3" />
     <PackageReference Include="OpenTracing" Version="0.12.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-beta-63102-01" PrivateAssets="All" />
   </ItemGroup>
